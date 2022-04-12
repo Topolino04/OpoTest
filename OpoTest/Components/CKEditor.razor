@@ -1,0 +1,62 @@
+﻿
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+@if (loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+@if (ReadOnly)
+{
+    <div class="ck-content">
+        @if (!string.IsNullOrWhiteSpace(Value))
+            @(new MarkupString(Value))
+    </div>
+}
+else
+{
+    <div id="@Id" />
+}
+
+@code {
+    string _id = $"CKEditor_{Guid.NewGuid().ToString().ToLower().Replace("-", "")}";
+    [Parameter]
+    public string Id
+    {
+        get => _id;
+        set => _id = value;
+    }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public string Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    bool loading = true;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !ReadOnly)
+            await JSRuntime.InvokeVoidAsync("CKEditorInterop.init", Id, Value, DotNetObjectReference.Create(this));
+        loading = false;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task EditorDataChanged(string data)
+    {
+        Value = data;
+        StateHasChanged();
+        ValueChanged.InvokeAsync(data);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        if (!ReadOnly)
+            JSRuntime.InvokeVoidAsync("CKEditorInterop.destroy", Id);
+    }
+}

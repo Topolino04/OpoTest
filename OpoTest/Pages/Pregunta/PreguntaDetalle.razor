@@ -1,0 +1,128 @@
+﻿@page "/pregunta/{ID:int}"
+@attribute [Authorize]
+
+@inject SecurityProviderService provider
+@inject IDialogService dialogService
+@inject NavigationManager navigationManager
+@inject ISnackbar snackbar
+
+<MudPaper Class="pa-4">
+    <MudToolBar>
+        <MudText Typo="Typo.h4">Pregunta</MudText>
+        <MudSpacer />
+        <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" StartIcon=@Icons.Material.TwoTone.Undo Link="/pregunta">Atras</MudButton>
+        <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" StartIcon=@Icons.Material.TwoTone.Refresh OnClick="Refresh">Refrescar</MudButton>
+        <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" StartIcon=@Icons.Material.TwoTone.Save OnClick="Save" Disabled="!objectSpace.IsModified">Save</MudButton>
+    </MudToolBar>
+    @if (pregunta == null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <EditForm Model="pregunta" Context="_">
+            <MudForm @ref="form">
+                <MudTabs>
+                    <MudTabPanel Text="pregunta">
+                        <MudGrid>
+                            <MudItem sm="4">
+                                <MudSelect Label="Categoria" @bind-Value="pregunta.Tema" Required="true">
+                                    @foreach (var tipo in temas)
+                                        {
+                                        <MudSelectItem @key="tipo" Value=@tipo>@tipo.Nombre</MudSelectItem>
+                                        }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem sm="8">
+                                <MudTextField Label="Texto" @bind-Value="pregunta.Enunciado" Required="true" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                    <MudTabPanel Text="Respuestas">
+                        <MudTable Dense="true" Hover="true" Items="pregunta.Respuestas" Style="overflow-x: auto;">
+                            <ToolBarContent>
+                                <MudText Typo="Typo.h6">Respuestas</MudText>
+                                <MudSpacer />
+                                <MudButton OnClick="_=> pregunta.Respuestas.Add(objectSpace.CreateObject<PlantillaRespuesta>())"> ADD </MudButton>
+                            </ToolBarContent>
+                            <RowTemplate>
+                                <MudTd>
+                                    <MudElement Class="d-flex">
+                                        <MudCheckBox Class="mr-8" Label="Check" ReadOnly="true" Checked="context.Correcta" />
+                                        <MudTextField Label="Texto" ReadOnly="true" @bind-Value="context.Texto" />
+                                    </MudElement>
+                                    <MudField Label="Texto Largo">
+                                        <CKEditor ReadOnly="true" Value=@context.Explicacion />
+                                    </MudField>
+                                </MudTd>
+                            </RowTemplate>
+                            <RowEditingTemplate>
+                                <MudTd>
+                                    <MudElement Class="d-flex mb-2">
+                                        <MudCheckBox Class="mr-8" Label="Check" @bind-Checked="context.Correcta" />
+                                        <MudTextField Label="Texto" @bind-Value="context.Texto" />
+                                    </MudElement>
+                                    <CKEditor @bind-Value="@context.Explicacion" />
+                                </MudTd>
+                            </RowEditingTemplate>
+                        </MudTable>
+                    </MudTabPanel>
+                    <MudTabPanel Text="Detalle">
+                        <CKEditor @bind-Value="@pregunta.Explicacion" />
+                    </MudTabPanel>
+                </MudTabs>
+            </MudForm>
+        </EditForm>
+    }
+</MudPaper>
+
+@code
+{
+    MudForm form;
+    IEnumerable<Tema> temas;
+    PlantillaPregunta pregunta;
+    IObjectSpace objectSpace;
+
+    [Parameter]
+    public int ID { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        objectSpace = provider.ObjectSpaceProvider.CreateObjectSpace();
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    async Task Refresh()
+    {
+        if (objectSpace.IsModified)
+        {
+            var result = await dialogService.ShowMessageBox("Hay cambios sin guardar", "¿Quieres continuar?", "Si", "No");
+            if (result != true) return;
+        }
+        objectSpace.Rollback();
+        objectSpace.Refresh();
+        temas = await objectSpace.GetObjectsQuery<Tema>(false).OrderBy(x => x.Nombre).ToListAsync();
+        pregunta = await objectSpace.GetObjectByKeyAsync<PlantillaPregunta>(ID) ?? objectSpace.CreateObject<PlantillaPregunta>();
+        StateHasChanged();
+    }
+
+    async Task Save()
+    {
+        await form.Validate();
+        if (!form.IsValid) return;
+
+        bool redirect = objectSpace.IsNewObject(pregunta);
+        await objectSpace.CommitChangesAsync();
+        snackbar.Add("Cambios guardados con éxito", Severity.Success); 
+        navigationManager.NavigateTo($"/pregunta/{pregunta.Oid}");
+    }
+
+    public void Dispose()
+    {
+        objectSpace?.Dispose();
+    }
+}

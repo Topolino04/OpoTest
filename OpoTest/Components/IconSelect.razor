@@ -1,0 +1,128 @@
+﻿
+<MudField @onclick="_=> open = true" Adornment="Adornment.End" AdornmentIcon=@Icons.Material.TwoTone.Search>
+    <MudText><MudIcon Icon=@IconHelper.GetIcon(SelectedIcon) /> @SelectedIcon</MudText>
+    <MudPopover Open="open">
+        @if (false)
+        {
+            <MudToolBar Class="pb-4" Dense="true">
+                <MudSelect @bind-Value="TipoIcono">
+                    <MudSelectItem Value=@IconType.Filled> <MudIcon Icon=@Icons.Material.Filled.Image /> Filled</MudSelectItem>
+                    <MudSelectItem Value=@IconType.Outlined><MudIcon Icon=@Icons.Material.Outlined.Image /> Outlined</MudSelectItem>
+                    <MudSelectItem Value=@IconType.Rounded><MudIcon Icon=@Icons.Material.Rounded.Image /> Rounded</MudSelectItem>
+                    <MudSelectItem Value=@IconType.Sharp><MudIcon Icon=@Icons.Material.Sharp.Image /> Sharp</MudSelectItem>
+                    <MudSelectItem Value=@IconType.TwoTone><MudIcon Icon=@Icons.Material.TwoTone.Image /> TwoTone</MudSelectItem>
+                </MudSelect>
+                <MudSpacer />
+                <MudTextField @bind-Value="searchString" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </MudToolBar>
+            <MudElement Class="d-flex flex-wrap justify-space-between" Style="max-height:350px;overflow-y:auto">
+                <Virtualize TItem="string" ItemsProvider="async x=> new ItemsProviderResult<string>(GetItems().Skip(x.StartIndex).Take(x.Count), GetItems().Count())" Context="icon">
+                    <MudButton Class="ma-1 d-flex flex-column justify-center align-center"
+                               OnClick="_=> { SelectedIcon = icon; open = false; }">
+                        <MudIcon Icon=@IconHelper.GetIcon(icon) Size="Size.Large" />
+                    </MudButton>
+                </Virtualize>
+            </MudElement>
+        }
+        else
+        {
+            <MudTable Items=@GetItems() Dense="true" Hover="true" @bind-SelectedItem="SelectedIcon"
+                      Height="350px"
+                      Virtualize="true" FixedHeader="true">
+                <ToolBarContent>
+                    <MudSelect @bind-Value="TipoIcono">
+                        <MudSelectItem Value=@IconType.Filled> <MudIcon Icon=@Icons.Material.Filled.Image /> Filled</MudSelectItem>
+                        <MudSelectItem Value=@IconType.Outlined><MudIcon Icon=@Icons.Material.Outlined.Image /> Outlined</MudSelectItem>
+                        <MudSelectItem Value=@IconType.Rounded><MudIcon Icon=@Icons.Material.Rounded.Image /> Rounded</MudSelectItem>
+                        <MudSelectItem Value=@IconType.Sharp><MudIcon Icon=@Icons.Material.Sharp.Image /> Sharp</MudSelectItem>
+                        <MudSelectItem Value=@IconType.TwoTone><MudIcon Icon=@Icons.Material.TwoTone.Image /> TwoTone</MudSelectItem>
+                    </MudSelect>
+                    <MudSpacer />
+                    <MudTextField @bind-Value="searchString" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                </ToolBarContent>
+                <ColGroup>
+                    <col style="width: 30px;" />
+                    <col />
+                </ColGroup>
+                <RowTemplate>
+                    <MudTd><MudIcon Icon=@IconHelper.GetIcon(context) Size="Size.Large" /></MudTd>
+                    <MudTd><MudHighlighter Text=@context.Split('.')[1] HighlightedText=@searchString /></MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPopover>
+</MudField>
+<MudOverlay Visible="open" OnClick="_ => open = false" LockScroll="false" />
+
+
+
+@code {
+    bool open;
+    string searchString;
+    IconType TipoIcono;
+
+    [Parameter]
+    public string SelectedIcon { get; set; }
+
+
+    public IEnumerable<string> GetItems() =>
+        IconHelper.GetIconNames(TipoIcono)
+        .Where(x => x.ToUpper().Contains(searchString?.ToUpper() ?? ""));
+
+
+    public enum IconType { Filled, Outlined, Rounded, Sharp, TwoTone }
+
+    public static class IconHelper
+    {
+        public static string GetIcon(string name)
+        {
+
+            if (string.IsNullOrWhiteSpace(name) || !name.Split('.').Any()) return null;
+            var type = Enum.Parse<IconType>(name.Split('.')[0]);
+            name = name.Split('.')[1];
+            switch (type)
+            {
+                case IconType.Filled:
+                    return typeof(Filled).GetProperties().FirstOrDefault(x => x.Name == name).GetValue(Icons.Material.Filled) as string;
+
+                case IconType.Outlined:
+                    return typeof(Outlined).GetProperties().FirstOrDefault(x => x.Name == name).GetValue(Icons.Material.Outlined) as string;
+
+                case IconType.Rounded:
+                    return typeof(Rounded).GetProperties().FirstOrDefault(x => x.Name == name).GetValue(Icons.Material.Rounded) as string;
+
+                case IconType.Sharp:
+                    return typeof(Sharp).GetProperties().FirstOrDefault(x => x.Name == name).GetValue(Icons.Material.Sharp) as string;
+
+                case IconType.TwoTone:
+                    return typeof(TwoTone).GetProperties().FirstOrDefault(x => x.Name == name).GetValue(Icons.Material.TwoTone) as string;
+
+                default: return null;
+            }
+        }
+
+        public static IEnumerable<string> GetIconNames(IconType type)
+        {
+            switch (type)
+            {
+                case IconType.Filled:
+                    return typeof(Filled).GetProperties().Select(x => x.DeclaringType.Name + "." + x.Name);
+
+                case IconType.Outlined:
+                    return typeof(Outlined).GetProperties().Select(x => x.DeclaringType.Name + "." + x.Name);
+
+                case IconType.Rounded:
+                    return typeof(Rounded).GetProperties().Select(x => x.DeclaringType.Name + "." + x.Name);
+
+                case IconType.Sharp:
+                    return typeof(Sharp).GetProperties().Select(x => x.DeclaringType.Name + "." + x.Name);
+
+                case IconType.TwoTone:
+                    return typeof(TwoTone).GetProperties().Select(x => x.DeclaringType.Name + "." + x.Name);
+
+                default:
+                    return Enumerable.Empty<string>();
+            }
+        }
+    }
+}

@@ -1,0 +1,96 @@
+﻿@attribute [Authorize]
+
+@inject SecurityProviderService provider
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudText Typo="Typo.h5">Nuevo Examen</MudText>
+            </MudItem>
+            <MudItem sm="8">
+                <MudSelect @bind-Value="Tipo" Label="Tipo de examen">
+                    <MudSelectItem Value="TipoExamen.Fallos">Examen de fallos</MudSelectItem>
+                    <MudSelectItem Value="TipoExamen.Temas">Examen de temas</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem sm="4">
+                <MudNumericField @bind-Value="Numero" Label="Nº de preguntas" />
+            </MudItem>
+            @if (Tipo == TipoExamen.Temas)
+            {
+                <MudItem xs="12">
+                    <MudTreeView CanSelect="true" ExpandOnClick="true" Dense="true" @bind-SelectedValues="SelectedValues"
+                                 Style="max-height: 50vh; overflow-y: scroll"
+                                 T="Tema" Items="objectSpace.GetObjectsQuery<Tema>().Where(x=> x.Padre == null).OrderBy(x => x.Numero).ToHashSet()">
+                        <ItemTemplate>
+                            <MudTreeViewItem Items="@context.Hijos.OrderBy(x => x.Numero).ToHashSet()" Text="@context.Nombre" />
+                        </ItemTemplate>
+                    </MudTreeView>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="_=>  MudDialog.Cancel()">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Ok</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+
+
+    IObjectSpace objectSpace;
+    protected override void OnInitialized()
+    {
+        objectSpace = provider.ObjectSpaceProvider.CreateObjectSpace();
+    }
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    TipoExamen Tipo;
+
+    int Numero = 80;
+
+    HashSet<Tema> SelectedValues;
+
+    async Task Submit()
+    {
+        var examen = objectSpace.CreateObject<Examen>();
+        List<int> ids = default;
+
+        switch (Tipo)
+        {
+            case TipoExamen.Fallos:
+                ids = await objectSpace.GetObjectsQuery<ExamenPregunta>().Where(x => x.Estado == false).Select(x => x.Plantilla.Oid).ToListAsync();
+                break;
+            case TipoExamen.Temas:
+                examen.Temas.AddRange(SelectedValues);
+                ids = await objectSpace.GetObjectsQuery<PlantillaPregunta>().Where(x => SelectedValues.Contains(x.Tema)).Select(x => x.Oid).ToListAsync();
+                break;
+        }
+        if (ids.Any())
+        {
+            Shuffle(ids);
+            var preguntas = await objectSpace.GetObjectsByKeyAsync<PlantillaPregunta>(ids.Take(Numero).ToList(), true);
+            examen.Preguntas.AddRange(preguntas.OfType<PlantillaPregunta>().Select(x => x.GenerarExamenPregunta()));
+            await objectSpace.CommitChangesAsync();
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    enum TipoExamen { Fallos, Temas }
+
+    private static Random rng = new Random();
+    public static void Shuffle<T>(IList<T> list)
+    {
+        int n = list.Count;
+        while (n > 1)
+        {
+            n--;
+            int k = rng.Next(n + 1);
+            T value = list[k];
+            list[k] = list[n];
+            list[n] = value;
+        }
+    }
+}

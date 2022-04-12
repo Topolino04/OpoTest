@@ -1,0 +1,135 @@
+﻿@page "/tema"
+
+@attribute [Authorize]
+
+@inject SecurityProviderService provider
+@inject IDialogService dialogService
+@inject NavigationManager navigationManager
+@inject ISnackbar snackbar
+
+<MudPaper Class="px-4">
+    <MudToolBar DisableGutters="true">
+        <MudText Typo="Typo.h4"> Temas </MudText>
+        <MudSpacer />
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="_=>Nuevo()">Nuevo Tema</MudButton>
+        <MudButton StartIcon=@Icons.Material.Filled.Undo Color="Color.Primary" OnClick="Rollback">Deshacer cambios</MudButton>
+        <MudButton StartIcon=@Icons.Material.Filled.Save Color="Color.Primary" OnClick="Commit">Guardar</MudButton>
+    </MudToolBar>
+    <MudTreeView Items="TreeItems" Dense="true">
+        <ItemTemplate>
+            <MudTreeViewItem Items="@context.TreeItems" Value="@context" Text="@context.Tema.Nombre" Expanded=@context.Expand>
+                <Content>
+                    <MudTreeViewItemToggleButton @bind-Expanded="@context.Expand" Visible="@context.TreeItems.Any()" />
+                    <MudChip Label="true" Size="Size.Small"> @context.Tema.Numero</MudChip>
+                    <MudText>@context.Tema.Nombre</MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" OnClick="_=> Nuevo(context.Tema)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" OnClick="_ => Editar(context.Tema)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="_ => Borrar(context.Tema)" />
+                </Content>
+            </MudTreeViewItem>
+        </ItemTemplate>
+    </MudTreeView>
+</MudPaper>
+
+<MudDialog @bind-IsVisible="visible">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Tema
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem sm="4">
+                <MudNumericField Label="Numero" @bind-Value=" TemaActual.Numero" />
+            </MudItem>
+            <MudItem sm="8">
+                <MudTextFieldString Label="Nombre" @bind-Text="TemaActual.Nombre" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect Label="TemaSuperior" @bind-Value="TemaActual.Padre">
+                    @foreach (Tema tema in objectSpace.GetObjectsQuery<Tema>().OrderBy(x => x.Numero))
+                    {
+                        <MudSelectItem Value="@tema">@tema.DisplayFormatCompleto</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="_=> { visible = false; StateHasChanged(); }" Class="px-10">cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code
+{
+    bool visible;
+    Tema TemaActual;
+
+    private HashSet<TreeItemData> TreeItems { get; set; } = new HashSet<TreeItemData>();
+
+    IObjectSpace objectSpace;
+    protected override void OnInitialized()
+    {
+        objectSpace = provider.ObjectSpaceProvider.CreateObjectSpace();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        TemaActual = null;
+        var temas = await objectSpace.GetObjectsQuery<Tema>().Where(x => x.Padre == null).OrderBy(x => x.Numero).ToListAsync();
+        TreeItems = temas.Select(x => new TreeItemData(x)).ToHashSet();
+    }
+
+    void Nuevo(Tema temaPadre = null)
+    {
+        TemaActual = objectSpace.CreateObject<Tema>();
+        if (temaPadre != null)
+        {
+            TemaActual.Padre = temaPadre;
+            TemaActual.Numero = temaPadre.Hijos.Select(x => x.Numero).DefaultIfEmpty().Max() + 1;
+        }
+        visible = true;
+    }
+
+    void Editar(Tema tema)
+    {
+        TemaActual = tema;
+        visible = true;
+    }
+
+    void Borrar(Tema tema)
+    {
+        tema.Delete();
+        navigationManager.NavigateTo(navigationManager.Uri);
+        StateHasChanged();
+    }
+
+    async Task Commit()
+    {
+        await objectSpace.CommitChangesAsync();
+        StateHasChanged();
+        snackbar.Add("OK", Severity.Success);
+        navigationManager.NavigateTo(navigationManager.Uri);
+    }
+
+    async Task Rollback()
+    {
+        await OnInitializedAsync();
+        navigationManager.NavigateTo(navigationManager.Uri, true);
+    }
+
+    public class TreeItemData
+    {
+        public TreeItemData Padre { get; set; }
+        public bool Expand { get; set; } = true;
+        public Tema Tema { get; set; }
+
+        HashSet<TreeItemData> treeItems;
+        public HashSet<TreeItemData> TreeItems => treeItems ??= GenerarHijos();
+
+        public TreeItemData(Tema tema) { Tema = tema; }
+
+        HashSet<TreeItemData> GenerarHijos() => Tema.Hijos.OrderBy(x => x.Numero).Select(x => new TreeItemData(x) { Padre = this }).ToHashSet();
+    }
+}

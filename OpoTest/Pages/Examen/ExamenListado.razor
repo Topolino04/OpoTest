@@ -1,0 +1,79 @@
+﻿@page "/examen"
+@attribute [Authorize]
+
+@inject SecurityProviderService provider
+
+@inject NavigationManager navigationManager
+@inject IDialogService DialogService
+@inject ISnackbar snackbar
+
+<MudPaper Class="pa-4">
+    <MudToolBar>
+        <MudText Typo="Typo.h4">Exámenes</MudText>
+        <MudSpacer />
+        <MudButton StartIcon=@Icons.Material.TwoTone.Add OnClick="_=> DialogService.Show<ExamenNuevo>()">Nuevo</MudButton>
+        <MudButton StartIcon=@Icons.Material.TwoTone.PlaylistAddCheckCircle OnClick="Continuar">Continuar</MudButton>
+    </MudToolBar>
+    <MudTimeline TimelinePosition="TimelinePosition.Start">
+        <Virtualize TItem="Examen" Items="objectSpace.GetObjectsQuery<Examen>().OrderByDescending(x => x.Fecha).ToList()" Context="examen">
+            @{
+                var nota = ((double)examen.PreguntasCorrectas / examen.TotalPreguntas * 10);
+                var color = Color.Error;
+                if (nota > 5) color = Color.Warning;
+                if (nota > 8) color = Color.Success;
+                if (examen.PreguntasPendientes > 0) color = Color.Default;
+            }
+            <MudTimelineItem Color="color" Variant="Variant.Filled">
+                <ItemContent>
+                    <MudCard Elevation="25">
+                        <MudToolBar>
+                            @if (examen.PreguntasPendientes == 0)
+                            {
+                                <MudText Typo="Typo.body1">Nota: @nota.ToString("0.0")</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">Preguntas pendientes: @examen.PreguntasPendientes</MudText>
+                            }
+                            <MudSpacer />
+                            <MudText Typo="Typo.body1">@examen.Fecha</MudText>
+                            <MudIconButton Icon=@Icons.Material.TwoTone.PlaylistAddCheckCircle Link=@($"examen/{examen.Oid}") />
+                            <MudIconButton Icon=@Icons.Material.TwoTone.Delete OnClick="_=> Borrar(examen)" />
+                        </MudToolBar>
+                        <MudCardContent>
+                            @foreach (var tema in examen.Temas)
+                            {
+                                <MudChip>@tema.Nombre</MudChip>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                </ItemContent>
+            </MudTimelineItem>
+        </Virtualize>
+    </MudTimeline>
+</MudPaper>
+@code {
+
+    IObjectSpace objectSpace;
+    protected override void OnInitialized()
+    {
+        objectSpace = provider.ObjectSpaceProvider.CreateObjectSpace();
+    }
+
+    async Task Borrar(Examen examen)
+    {
+        bool? result = await DialogService.ShowMessageBox("Borrando examen", "¿Seguro que quieres borrar el examen?", yesText: "Borrar", cancelText: "Cancelar");
+        if (result == true)
+        {
+            examen.Delete();
+            await objectSpace.CommitChangesAsync();
+        }
+    }
+
+    async Task Continuar()
+    {
+        var item = await objectSpace.GetObjectsQuery<Examen>().Where(x => x.PreguntasPendientes == 0).OrderBy(x => x.Fecha).FirstOrDefaultAsync();
+        if (item != null) navigationManager.NavigateTo($"examne/{item.Oid}");
+        else snackbar.Add("No se ha encontrado un examen pendiente", Severity.Error);
+    }
+}

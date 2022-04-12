@@ -1,0 +1,108 @@
+﻿@page "/examen/{ID:int}"
+@attribute [Authorize]
+@inject SecurityProviderService securityProvider
+@inject NavigationManager navigationManager
+@inject IDialogService DialogService
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudPaper Class=" pa-4 d-flex">
+            <MudChip> Pendientes @examen.PreguntasPendientes</MudChip>
+            <MudChip Color="Color.Success"> Correctas @examen.PreguntasCorrectas</MudChip>
+            <MudChip Color="Color.Error"> Incorrectas @examen.PreguntasCorrectas</MudChip>
+            <MudChip Color="Color.Error"> Total @examen.PreguntasIncorrectas</MudChip>
+            <MudSpacer />
+            <MudSwitch @bind-Checked="autoresolver" Color="Color.Primary"> Autoresolver </MudSwitch>
+            <MudButton Class="mr-4" Disabled="pregunta.Estado.HasValue" Variant="Variant.Filled" Color="Color.Primary" OnClick="Resolver"> Resolver </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Siguiente">Siguiente</MudButton>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12">
+        <MudPaper>
+            <MudText Class="pa-2" Typo="Typo.h6"> @pregunta?.Enunciado</MudText>
+            <MudList Clickable="true">
+                @foreach (var respuesta in pregunta.Respuestas.OrderBy(x => x.Oid))
+                {
+                    var icono = Icons.Material.TwoTone.Circle;
+                    var color = Color.Default;
+                    if (pregunta.Estado.HasValue)
+                    {
+                        if (respuesta.Correcta)
+                        {
+                            color = Color.Success;
+                            icono = Icons.Material.TwoTone.CheckCircle;
+                        }
+                        else if (respuesta.Seleccionada && !respuesta.Correcta)
+                        {
+                            icono = Icons.Material.TwoTone.RemoveCircle;
+                            color = Color.Error;
+                        }
+                    }
+                    else
+                    {
+                        icono = (respuesta.Seleccionada) ? Icons.Material.TwoTone.CheckCircle : Icons.Material.TwoTone.Circle;
+                    }
+                    <MudListItem @key="respuesta.Oid" IconSize="Size.Large" AdornmentColor="color" Text=@respuesta.Texto Icon=@icono IconColor=@color OnClick="_ => Seleccionar(respuesta)" />
+                }
+            </MudList>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            @foreach (var aux in examen.Preguntas.OrderBy(x => x.Oid))
+            {
+                var color = aux == pregunta ? Color.Primary : aux.Estado.HasValue ? (aux.Estado.Value ? Color.Success : Color.Error) : Color.Default;
+                <MudButton @key="aux.Oid" Variant="Variant.Filled" Class="ma-1" Color=@color OnClick="_ => pregunta = aux"> @(aux.Oid )  </MudButton>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code
+{
+    bool autoresolver = true;
+
+    IObjectSpaceAsync objectSpace;
+
+    protected override void OnInitialized()
+    {
+        objectSpace = securityProvider.ObjectSpaceProvider.CreateObjectSpace() as IObjectSpaceAsync;
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        examen = await objectSpace.GetObjectByKeyAsync<Examen>(ID);
+        pregunta = examen.Preguntas.OrderBy(x => x.Oid).FirstOrDefault(x => !x.Estado.HasValue) ?? examen.Preguntas.OrderBy(x => x.Oid).FirstOrDefault();
+    }
+
+    Examen examen { get; set; }
+    ExamenPregunta pregunta { get; set; }
+
+    [Parameter]
+    public int? ID { get; set; }
+
+    async Task Seleccionar(ExamenRespuesta respuesta)
+    {
+        if (!respuesta.Pregunta.Estado.HasValue)
+        {
+            respuesta.Seleccionada = !respuesta.Seleccionada;
+            if (autoresolver)
+                await Resolver();
+        }
+    }
+
+    async Task Resolver()
+    {
+        foreach (var aux in examen.Preguntas.Where(x => !x.Estado.HasValue && x.Respuestas.Any(x => x.Seleccionada)))
+            aux.Resolver();
+        await objectSpace.CommitChangesAsync();
+    }
+
+    void Siguiente()
+    {
+        var sigPregunta = examen.Preguntas.OrderBy(x => x.Oid).SkipWhile(x => x != pregunta).Skip(1).FirstOrDefault();
+        if (sigPregunta != null)
+            pregunta = sigPregunta;
+    }
+}

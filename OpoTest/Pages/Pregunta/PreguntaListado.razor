@@ -1,0 +1,106 @@
+﻿@page "/pregunta"
+@attribute [Authorize]
+
+@inject SecurityProviderService provider
+@inject NavigationManager navigationManager
+@inject IDialogService dialogService
+@inject ISnackbar snackbar
+
+<MudGrid>
+    <MudItem xs="8">
+        <MudPaper>
+            <MudTable Items="GetData()" Hover="true" FixedHeader="true" RowsPerPage="3">
+                <ToolBarContent>
+                    <MudText Typo="Typo.h4">Preguntas</MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.TwoTone.Add" Link="/pregunta/0" />
+                    <MudIconButton Icon="@Icons.TwoTone.FileUpload" />
+
+                    <MudTextField @bind-Text="filtro" T="string" Placeholder="Filtrar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+                </ToolBarContent>
+                <RowTemplate>
+                    <MudTd>
+                        <MudText Typo="Typo.body1">
+                            <MudHighlighter Text="@context.Enunciado" HighlightedText="@filtro" />
+                        </MudText>
+                        @foreach (var resp in context.Respuestas.OrderBy(x=> x.Oid))
+                        {
+                            <MudText Typo="Typo.body2" Color=@(resp.Correcta ? Color.Success : Color.Error)>
+                                <MudIcon Icon=@(resp.Correcta ? Icons.TwoTone.Check : Icons.TwoTone.Close) Size="Size.Small" />
+                                <MudHighlighter Text="@resp.Texto" HighlightedText="@filtro" />
+                            </MudText>
+                        }
+                        <MudToolBar DisableGutters="true" Dense="true">
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.TwoTone.Edit" Link=@($"/pregunta/{context.Oid}") />
+                            <MudIconButton Icon="@Icons.TwoTone.Delete" OnClick="_=> Delete(context)" />
+                        </MudToolBar>
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new[] { 3, 5, 10 }" />
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="4">
+        <MudPaper>
+            <MudExpansionPanels DisableBorders="true">
+                <MudExpansionPanel Text="Temas">
+                    <MudSelect T="Convocatoria" Label="Convocatoria">
+                        @foreach (Convocatoria convocatoria in objectSpace.GetObjectsQuery<Convocatoria>())
+                        {
+                            <MudSelectItem Value="convocatoria">@convocatoria.Nombre</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTreeView CanSelect="true" @bind-SelectedValues="temas" ExpandOnClick="true" Dense="true"
+                                 T="Tema" Items="objectSpace.GetObjectsQuery<Tema>().Where(x => x.Padre == null).OrderBy(x => x.Numero).ToHashSet()"
+                                 ServerData="async x => x.Hijos.OrderBy(x => x.Numero).ToHashSet() ">
+                        <ItemTemplate>
+                            <MudTreeViewItem Value="@context" Text="@context.DisplayFormat" TextTypo="@Typo.caption" />
+                        </ItemTemplate>
+                    </MudTreeView>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+
+@code {
+
+    string filtro = "";
+
+    HashSet<Tema> temas = new HashSet<Tema>();
+
+    IObjectSpace objectSpace;
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        objectSpace = provider.ObjectSpaceProvider.CreateObjectSpace();
+    }
+
+    private IQueryable<PlantillaPregunta> GetData()
+    {
+        IQueryable<PlantillaPregunta> query = objectSpace.GetObjectsQuery<PlantillaPregunta>();
+
+        if (!string.IsNullOrWhiteSpace(filtro))
+            query = query.Where(x => x.Enunciado.Contains(filtro));
+
+        if (temas.Any())
+            query = query.Where(x => temas.Contains(x.Tema));
+
+        return query.AsQueryable();
+    }
+    async Task Delete(PlantillaPregunta plantilla)
+    {
+
+        var result = await dialogService.ShowMessageBox("Eliminar pregunta", "¿Seguro que quieres borrar la pregunta?","Si","No");
+        if (result == true)
+        {
+            plantilla.Delete();
+            await objectSpace.CommitChangesAsync();
+            snackbar.Add("OK", Severity.Success);
+        }
+    }
+}
